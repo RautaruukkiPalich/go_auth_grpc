@@ -1,0 +1,14 @@
+env: "local"
+database: 
+  user: "postgres"
+  password: "postgres"
+  host: "localhost"
+  port: 5444
+  db_name: "go_auth_grpc"
+server:
+  host: "localhost"
+  port: 8001
+  conn_timeout: 5s
+token:
+  ttl: 1h
+  secret: "very_secret_token"
