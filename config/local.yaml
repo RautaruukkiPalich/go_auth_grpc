@@ -1,10 +1,12 @@
 env: "local"
 database: 
+  driver: "postgres"
   user: "postgres"
   password: "postgres"
   host: "localhost"
   port: 5444
   db_name: "go_auth_grpc"
+migration_path: "./migrations"
 server:
   host: "localhost"
   port: 8001
