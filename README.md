@@ -1,0 +1,1 @@
+grpc contract https://github.com/RautaruukkiPalich/go_auth_grpc_contract
