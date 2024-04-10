@@ -13,4 +13,4 @@ server:
   conn_timeout: 5s
 token:
   ttl: 1h
-  secret: "very_secret_token"
+  
