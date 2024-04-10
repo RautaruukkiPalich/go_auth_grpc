@@ -8,7 +8,6 @@ import (
 
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/app"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/config"
-	// "github.com/rautaruukkipalich/go_auth_grpc/internal/lib/slerr"
 )
 
 const (
@@ -27,19 +26,18 @@ func main() {
 		log.Info("", slog.Any("config", cfg))
 	}
 
+	// init app
 	application := app.New(log, cfg)
+
+	// run server
 	go application.GRPCSrv.MustRun()
 
-	// TODO: init app
-
-	// TODO: run server
-
-	// stop application
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 
 	<- stop
 	
+	// stop server
 	application.GRPCSrv.Stop()
 	log.Info("application stopped")
 
