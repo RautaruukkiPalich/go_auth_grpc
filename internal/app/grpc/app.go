@@ -8,6 +8,7 @@ import (
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/config"
 	authgrpc "github.com/rautaruukkipalich/go_auth_grpc/internal/grpc/auth"
 	authsrvcs "github.com/rautaruukkipalich/go_auth_grpc/internal/services/auth"
+	"github.com/rautaruukkipalich/go_auth_grpc/internal/storage/sqlstorage"
 	"google.golang.org/grpc"
 )
 
@@ -27,11 +28,33 @@ func New(
 		),
 	)
 
+	var dbURI string
+
+	switch cfg.Database.Driver {
+	case "postgres":
+		dbURI = fmt.Sprintf(
+			"%s://%s:%s@%s:%s/%s?sslmode=disable",
+			cfg.Database.Driver,
+			cfg.Database.User,
+			cfg.Database.Password,
+			cfg.Database.Host,
+			cfg.Database.Port,
+			cfg.Database.DBName,
+		)
+	default:
+		panic("invalid database driver")
+	}
+
+	storage, err := sqlstorage.New(dbURI)
+	if err != nil {
+		panic(err)
+	}
+
 	auth := authsrvcs.New(
-		nil,
-		nil, 
-		nil,
-		nil,
+		storage,
+		storage,
+		storage,
+		storage,
 		log,
 		cfg.Token.TTL,
 	)
@@ -39,9 +62,9 @@ func New(
 	authgrpc.RegisterServer(gRPCServer, auth)
 
 	return &App{
-		log: log,
+		log:        log,
 		gRPCServer: gRPCServer,
-		port: cfg.Server.Port,
+		port:       cfg.Server.Port,
 	}
 }
 

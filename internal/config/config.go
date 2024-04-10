@@ -16,6 +16,7 @@ type Config struct {
 }
 
 type DatabaseConfig struct {
+	Driver   string `yaml:"driver"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 	Host     string `yaml:"host"`
@@ -30,8 +31,7 @@ type ServerConfig struct {
 }
 
 type TokenConfig struct {
-	TTL    time.Duration `yaml:"ttl"`
-	Secret string        `yaml:"secret"`
+	TTL time.Duration `yaml:"ttl"`
 }
 
 func MustLoadConfig() *Config {
