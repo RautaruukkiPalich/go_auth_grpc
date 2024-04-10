@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/rautaruukkipalich/go_auth_grpc/internal/utils/validation"
+	"github.com/rautaruukkipalich/go_auth_grpc/internal/domain/models"
 	auth_grpc "github.com/rautaruukkipalich/go_auth_grpc_contract/gen/go/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -11,11 +11,11 @@ import (
 )
 
 type Auth interface {
-	Register(ctx context.Context, username string, password string) (success bool, err error)
-	Login(ctx context.Context, username string, password string, appID int) (token string, err error)
-	ChangeUsername(ctx context.Context, username string) (success bool, err error)
-	ChangePassword(ctx context.Context, oldPassword string, newPassword string) (success bool, err error)
-	Me(ctx context.Context, token string) (user auth_grpc.User, err error)
+	Register(ctx context.Context, username, password string) (success bool, err error)
+	Login(ctx context.Context, username, password string, appID int) (token string, err error)
+	ChangeUsername(ctx context.Context, token, username string) (success bool, err error)
+	ChangePassword(ctx context.Context, token, newPassword string) (success bool, err error)
+	Me(ctx context.Context, token string) (user models.User, err error)
 }
 
 type serverAPI struct {
@@ -58,8 +58,8 @@ func (s *serverAPI) Login(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	// TODO: change app id
-	token, err := s.auth.Login(ctx, req.GetUsername(), req.GetPassword(), 0)
+	// TODO: change app id get from req
+	token, err := s.auth.Login(ctx, req.GetUsername(), req.GetPassword(), 1)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -73,11 +73,11 @@ func (s *serverAPI) ChangePassword(
 	ctx context.Context,
 	req *auth_grpc.ChangePasswordRequest,
 ) (*auth_grpc.ChangePasswordResponse, error) {
-	if err := validateChangePassword(req.GetToken(), req.GetOldPassword(), req.GetNewPassword()); err != nil {
+	if err := validateChangePassword(req.GetToken(), req.GetNewPassword()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	success, err := s.auth.ChangePassword(ctx, req.GetOldPassword(), req.GetNewPassword())
+	success, err := s.auth.ChangePassword(ctx, req.GetToken(), req.GetNewPassword())
 	if err != nil {
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -95,7 +95,7 @@ func (s *serverAPI) ChangeUsername(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	success, err := s.auth.ChangeUsername(ctx, req.GetUsername())
+	success, err := s.auth.ChangeUsername(ctx, req.GetToken(), req.GetUsername())
 	if err != nil {
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -119,66 +119,9 @@ func (s *serverAPI) Me(
 	}
 
 	return &auth_grpc.MeResponse{
-		User: &user,
+		User: &auth_grpc.User{
+			Id: user.ID,
+			Username: user.Username,
+		},
 	}, nil
-}
-
-func validateRegister(username string, password string) error {
-	if err := validation.ValidationUsername(username); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if err := validation.ValidationPassword(password); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return nil
-}
-
-func validateLogin(username string, password string) error {
-	if err := validation.ValidationUsername(username); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if err := validation.ValidationPassword(password); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return nil
-}
-
-func validateChangePassword(token string, oldPassword string, newPassword string) error {
-	if err := validation.ValidationToken(token); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if err := validation.ValidationPassword(oldPassword); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if err := validation.ValidationPassword(newPassword); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return nil
-}
-
-func validateChangeUsername(token string, username string) error {
-	if err := validation.ValidationUsername(username); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if err := validation.ValidationToken(token); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return nil
-}
-
-func validateMe(token string) error {
-	if err := validation.ValidationToken(token); err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return nil
 }
