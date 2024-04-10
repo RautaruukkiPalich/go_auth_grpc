@@ -1,4 +1,4 @@
-package migrator
+package main
 
 import (
 	"errors"
@@ -19,7 +19,7 @@ type Config struct {
 }
 
 type DatabaseConfig struct {
-	Driver string `yaml:"driver"`
+	Driver   string `yaml:"driver"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 	Host     string `yaml:"host"`
@@ -37,7 +37,7 @@ func main() {
 
 	var dbURI string
 
-	switch cfg.Database.Driver{
+	switch cfg.Database.Driver {
 	case postgreSQL:
 		dbURI = fmt.Sprintf(
 			"%s://%s:%s@%s:%s/%s?sslmode=disable",
@@ -54,8 +54,8 @@ func main() {
 	}
 
 	m, err := migrate.New(
-		"file://"+cfg.MigrationPath,
-		dbURI, 
+		fmt.Sprintf("file://%s", cfg.MigrationPath),
+		dbURI,
 	)
 	if err != nil {
 		panic(err)
