@@ -11,15 +11,14 @@ import (
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/lib/jwt"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/lib/slerr"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/storage"
-	auth_grpc_v1 "github.com/rautaruukkipalich/go_auth_grpc_contract/gen/go/auth"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Auth struct {
 	log         *slog.Logger
 	usrSaver    UserSaver
-	usrGetter  UserGetter
-	usrPatcher UserPatcher
+	usrGetter   UserGetter
+	usrPatcher  UserPatcher
 	appProvider AppProvider
 	tokenTTL    time.Duration
 }
@@ -29,12 +28,13 @@ type UserSaver interface {
 }
 
 type UserGetter interface {
-	GetUser(ctx context.Context, username string) (models.User, error)
+	GetUserByID(ctx context.Context, id int) (models.User, error)
+	GetUserByUsername(ctx context.Context, username string) (models.User, error)
 }
 
 type UserPatcher interface {
 	PatchUsername(ctx context.Context, user models.User, username string) error
-	PatchPassword(ctx context.Context, user models.User, username string) error
+	PatchPassword(ctx context.Context, user models.User, hashed_password []byte) error
 }
 
 type AppProvider interface {
@@ -43,7 +43,11 @@ type AppProvider interface {
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUserExist = errors.New("user already exists")
+	ErrUserExist          = errors.New("user already exists")
+)
+
+const (
+	ZeroValue = 0
 )
 
 func New(
@@ -65,14 +69,14 @@ func New(
 }
 
 // Register implements auth.Auth.
-func (a *Auth) Register(ctx context.Context, username string, password string) (success bool, err error) {
+func (a *Auth) Register(ctx context.Context, username, password string) (bool, error) {
 	const op = "auth.Register"
 	log := a.log.With(slog.String("op", op))
 	log.Info("register user")
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Info("error generating password: ", slerr.Err(err))
+		log.Info("error generating password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -81,7 +85,7 @@ func (a *Auth) Register(ctx context.Context, username string, password string) (
 			log.Info("user already exists", slerr.Err(err))
 			return false, fmt.Errorf("%s: %w", op, ErrUserExist)
 		}
-		log.Error("error save user: ", slerr.Err(err))
+		log.Error("error save user", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -94,31 +98,35 @@ func (a *Auth) Login(ctx context.Context, username string, password string, appI
 	log := a.log.With(slog.String("op", op))
 	log.Info("login user")
 
-	user, err := a.usrGetter.GetUser(ctx, username)
+	user, err := a.usrGetter.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Error("error get user: ", slerr.Err(err))
+			log.Error("failed to get user", slerr.Err(err))
 			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
 
-		log.Error("failed to get user: ", slerr.Err(err))
+		log.Error("failed to get user", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.HashedPass, []byte(password)); err != nil {
-		log.Info("error generating password: ", slerr.Err(err))
+		log.Info("failed to check password", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	app, err := a.appProvider.App(ctx, appID)
 	if err != nil {
-		log.Info("error get app: ", slerr.Err(err))
+		log.Info("failed to get app", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, err)
+	}
+	if app.Secret == "" {
+		log.Info("empty secret", slerr.Err(ErrInvalidCredentials))
+		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	token, err := jwt.NewJWTToken(user, app, a.tokenTTL)
 	if err != nil {
-		log.Info("error create token: ", slerr.Err(err))
+		log.Info("failed to create token", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -127,28 +135,120 @@ func (a *Auth) Login(ctx context.Context, username string, password string, appI
 }
 
 // ChangePassword implements auth.Auth.
-func (a *Auth) ChangePassword(ctx context.Context, oldPassword string, newPassword string) (success bool, err error) {
+func (a *Auth) ChangePassword(ctx context.Context, token, newPassword string) (bool, error) {
 	const op = "auth.ChangePassword"
 	log := a.log.With(slog.String("op", op))
 	log.Info("change password")
 
-	panic("unimplemented")
+	appId, err := jwt.GetAppIDFromJWTToken(token)
+	if err != nil {
+		log.Error("failed to parce app id from token", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	app, err := a.appProvider.App(ctx, appId)
+	if err != nil {
+		log.Error("failed to get app id", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	userID, err := jwt.GetSubFromJWTToken(token, app)
+	if err != nil {
+		log.Error("failed to get user id", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	user, err := a.usrGetter.GetUserByID(ctx, userID)
+	if err != nil {
+		log.Info("failed to get user from DB", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Info("failed to generate password", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = a.usrPatcher.PatchPassword(ctx, user, hashedPass)
+	if err != nil {
+		log.Info("failed to patch password", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return true, nil
 }
 
 // ChangeUsername implements auth.Auth.
-func (a *Auth) ChangeUsername(ctx context.Context, username string) (success bool, err error) {
+func (a *Auth) ChangeUsername(ctx context.Context, token, username string) (bool, error) {
 	const op = "auth.ChangeUsername"
 	log := a.log.With(slog.String("op", op))
 	log.Info("change username")
 
-	panic("unimplemented")
+	appId, err := jwt.GetAppIDFromJWTToken(token)
+	if err != nil {
+		log.Error("failed to parce app id from token", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	app, err := a.appProvider.App(ctx, appId)
+	if err != nil {
+		log.Error("failed to get app id", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	userID, err := jwt.GetSubFromJWTToken(token, app)
+	if err != nil {
+		log.Error("failed to get user id", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	user, err := a.usrGetter.GetUserByID(ctx, userID)
+	if err != nil {
+		log.Info("failed to get user from DB", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = a.usrPatcher.PatchUsername(ctx, user, username)
+	if err != nil {
+		log.Info("failed to patch username", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return true, nil
 }
 
 // Me implements auth.Auth.
-func (a *Auth) Me(ctx context.Context, token string) (user auth_grpc_v1.User, err error) {
+func (a *Auth) Me(ctx context.Context, token string) (models.User, error) {
 	const op = "auth.Me"
 	log := a.log.With(slog.String("op", op))
 	log.Info("get me")
 
-	panic("unimplemented")
+	var user models.User
+
+	appId, err := jwt.GetAppIDFromJWTToken(token)
+	if err != nil {
+		log.Error("failed to parce app id from token", slerr.Err(err))
+		return user, fmt.Errorf("%s: %w", op, err)
+	}
+
+	app, err := a.appProvider.App(ctx, appId)
+	if err != nil {
+		log.Error("failed to get app id", slerr.Err(err))
+		return user, fmt.Errorf("%s: %w", op, err)
+	}
+
+	userID, err := jwt.GetSubFromJWTToken(token, app)
+	if err != nil {
+		log.Error("failed to get user id", slerr.Err(err))
+		return user, fmt.Errorf("%s: %w", op, err)
+	}
+
+	user, err = a.usrGetter.GetUserByID(ctx, userID)
+	if err != nil {
+		log.Info("failed to get user from DB", slerr.Err(err))
+		return user, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return user, nil
 }
