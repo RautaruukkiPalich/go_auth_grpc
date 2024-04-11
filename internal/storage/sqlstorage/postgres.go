@@ -33,7 +33,7 @@ func New(path string) (*Storage, error) {
 }
 
 
-func (s *Storage) SaveUser(ctx context.Context, username string, hashedPass []byte) error {
+func (s *Storage) SaveUser(ctx context.Context, email, username string, hashedPass []byte) error {
 	const op = "storage.postgres.SaveUser"
 
 	tx, _ := s.db.Begin()
@@ -41,8 +41,8 @@ func (s *Storage) SaveUser(ctx context.Context, username string, hashedPass []by
 
 	stmt, err := tx.Prepare(
 		`INSERT 
-		INTO users (username, slug, hashed_password, last_password_change, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6)`,
+		INTO users (email, username, slug, hashed_password, last_password_change, created_at, updated_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 	)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
@@ -53,6 +53,7 @@ func (s *Storage) SaveUser(ctx context.Context, username string, hashedPass []by
 
 	_, err = stmt.ExecContext(
 		ctx,
+		email,
 		username,
 		slug,
 		hashedPass,
@@ -75,14 +76,14 @@ func (s *Storage) SaveUser(ctx context.Context, username string, hashedPass []by
 }
 
 func (s *Storage) GetUserByID(ctx context.Context, userID int) (models.User, error) {
-	const op = "storage.postgres.GetUser"
+	const op = "storage.postgres.GetUserByID"
 	var user models.User
 
 	tx, _ := s.db.Begin()
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(
-		`SELECT id, username, slug, hashed_password, last_password_change, created_at, updated_at  
+		`SELECT id, email username, slug, hashed_password, last_password_change, created_at, updated_at  
 		FROM users
 		WHERE id = $1`,
 	)
@@ -92,7 +93,10 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int) (models.User, err
 
 	row := stmt.QueryRowContext(ctx, userID) 
 
-	err = row.Scan(&user.ID, &user.Username, &user.Slug, &user.HashedPass, &user.LastPasswordChange, &user.CreatedAt, &user.UpdatedAt)
+	err = row.Scan(
+		&user.ID, &user.Email, &user.Username, &user.Slug, &user.HashedPass,
+		&user.LastPasswordChange, &user.CreatedAt, &user.UpdatedAt,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows{
 			return user, fmt.Errorf("%s: %w", op, storage.ErrUserNotFound)
@@ -105,27 +109,28 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int) (models.User, err
 	return user, nil
 }
 
-func (s *Storage) GetUserByUsername(ctx context.Context, username string) (models.User, error) {
-	const op = "storage.postgres.GetUser"
+func (s *Storage) GetUserByEmail(ctx context.Context, email string) (models.User, error) {
+	const op = "storage.postgres.GetUserByEmail"
 	var user models.User
 
 	tx, _ := s.db.Begin()
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(
-		`SELECT id, username, slug, hashed_password, last_password_change, created_at, updated_at  
+		`SELECT id, email, username, slug, hashed_password, last_password_change, created_at, updated_at  
 		FROM users
-		WHERE slug like $1`,
+		WHERE email like $1`,
 	)
 	if err != nil {
 		return user, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slug := strings.ToLower(username)
+	row := stmt.QueryRowContext(ctx, email) 
 
-	row := stmt.QueryRowContext(ctx, slug) 
-
-	err = row.Scan(&user.ID, &user.Username, &user.Slug, &user.HashedPass, &user.LastPasswordChange, &user.CreatedAt, &user.UpdatedAt)
+	err = row.Scan(
+		&user.ID, &user.Email, &user.Username, &user.Slug, &user.HashedPass,
+		&user.LastPasswordChange, &user.CreatedAt, &user.UpdatedAt,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows{
 			return user, fmt.Errorf("%s: %w", op, storage.ErrUserNotFound)
@@ -146,10 +151,10 @@ func (s *Storage) PatchUsername(ctx context.Context, user models.User, username 
 	defer tx.Rollback()
 		
 	stmt, err := tx.Prepare(
-		`UPDATE user 
+		`UPDATE users 
 		SET 
-			username = $1
-			slug = $2
+			username = $1,
+			slug = $2,
 			updated_at = $3
 		WHERE id = $4`,
 	)
@@ -160,12 +165,7 @@ func (s *Storage) PatchUsername(ctx context.Context, user models.User, username 
 	slug := strings.ToLower(username)
 	now := time.Now().UTC()
 
-	res, err := stmt.ExecContext(ctx, username, slug, now, user.ID)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	_, err = res.LastInsertId()
+	_, err = stmt.ExecContext(ctx, username, slug, now, user.ID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -183,10 +183,10 @@ func (s *Storage) PatchPassword(ctx context.Context, user models.User, password 
 	defer tx.Rollback()
 	
 	stmt, err := tx.Prepare(
-		`UPDATE user 
+		`UPDATE users 
 		SET 
-			hashed_password = $1
-			updatedAt = $2
+			hashed_password = $1,
+			updated_at = $2,
 			last_password_change = $3
 		WHERE id = $4`,
 	)
@@ -196,12 +196,7 @@ func (s *Storage) PatchPassword(ctx context.Context, user models.User, password 
 
 	now := time.Now().UTC()
 
-	res, err := stmt.ExecContext(ctx, password, now, user.ID)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	_, err = res.LastInsertId()
+	_, err = stmt.ExecContext(ctx, password, now, now, user.ID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
