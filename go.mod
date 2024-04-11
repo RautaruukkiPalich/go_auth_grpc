@@ -19,7 +19,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.17.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/joho/godotenv v1.5.1 // indirect
-	github.com/rautaruukkipalich/go_auth_grpc_contract v0.0.4
+	github.com/rautaruukkipalich/go_auth_grpc_contract v0.0.5
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect

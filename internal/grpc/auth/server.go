@@ -11,10 +11,11 @@ import (
 )
 
 type Auth interface {
-	Register(ctx context.Context, username, password string) (success bool, err error)
-	Login(ctx context.Context, username, password string, appID int) (token string, err error)
+	Register(ctx context.Context, email, username, password string) (success bool, err error)
+	Login(ctx context.Context, email, password string, appID int) (token string, err error)
 	ChangeUsername(ctx context.Context, token, username string) (success bool, err error)
 	ChangePassword(ctx context.Context, token, newPassword string) (success bool, err error)
+	ResetPassword(ctx context.Context, email string) (success bool, err error)
 	Me(ctx context.Context, token string) (user models.User, err error)
 }
 
@@ -35,11 +36,11 @@ func (s *serverAPI) Register(
 	req *auth_grpc.RegisterRequest,
 ) (*auth_grpc.RegisterResponse, error) {
 	
-	if err := validateRegister(req.GetPassword(), req.GetUsername()); err != nil {
+	if err := validateRegister(req.GetEmail(), req.GetPassword(), req.GetUsername()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	success, err := s.auth.Register(ctx, req.GetUsername(), req.GetPassword())
+	success, err := s.auth.Register(ctx, req.GetEmail(), req.GetUsername(), req.GetPassword())
 	if err != nil {
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -54,12 +55,12 @@ func (s *serverAPI) Login(
 	req *auth_grpc.LoginRequest,
 ) (*auth_grpc.LoginResponse, error) {
 	
-	if err := validateLogin(req.GetPassword(), req.GetUsername()); err != nil {
+	if err := validateLogin(req.GetEmail(), req.GetPassword(), req.GetAppId()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	// TODO: change app id get from req
-	token, err := s.auth.Login(ctx, req.GetUsername(), req.GetPassword(), 1)
+	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
 	if err != nil {
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -105,6 +106,24 @@ func (s *serverAPI) ChangeUsername(
 	}, nil
 }
 
+func (s *serverAPI) ResetPassword(
+	ctx context.Context,
+	req *auth_grpc.ResetPasswordRequest,
+) (*auth_grpc.ResetPasswordResponse, error) {
+	if err := validateResetPassword(req.GetEmail()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	success, err := s.auth.ResetPassword(ctx, req.GetEmail())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &auth_grpc.ResetPasswordResponse{
+		Success: success,
+	}, nil
+}
+
 func (s *serverAPI) Me(
 	ctx context.Context,
 	req *auth_grpc.MeRequest,
@@ -121,6 +140,7 @@ func (s *serverAPI) Me(
 	return &auth_grpc.MeResponse{
 		User: &auth_grpc.User{
 			Id: user.ID,
+			Email: user.Email,
 			Username: user.Username,
 		},
 	}, nil
