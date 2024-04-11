@@ -279,7 +279,10 @@ func (a *Auth) ResetPassword(ctx context.Context, email string) (bool, error) {
 	a.broker.AddToQueue(
 		kafka.KafkaMessage{
 			Topic: "mail",
-			Payload: password,
+			Payload: kafka.Payload{
+				Email: user.Email,
+				Message: password,
+			},
 		},
 	)
 
