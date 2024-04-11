@@ -1,13 +1,15 @@
 package validation
 
-import "errors"
+import (
+	"fmt"
+)
 
 var (
-	ErrEmptyUsername = errors.New("empty username")
+	ErrEmptyUsername = fmt.Errorf("empty username")
 )
 
 func ValidationUsername(username string) error {
-	if username == "" {
+	if username == EmptyString {
 		return ErrEmptyUsername
 	}
 
