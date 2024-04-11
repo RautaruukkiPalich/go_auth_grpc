@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/domain/models"
@@ -24,12 +25,12 @@ type Auth struct {
 }
 
 type UserSaver interface {
-	SaveUser(ctx context.Context, username string, hashedPass []byte) error
+	SaveUser(ctx context.Context, email, username string, hashedPass []byte) error
 }
 
 type UserGetter interface {
 	GetUserByID(ctx context.Context, id int) (models.User, error)
-	GetUserByUsername(ctx context.Context, username string) (models.User, error)
+	GetUserByEmail(ctx context.Context, email string) (models.User, error)
 }
 
 type UserPatcher interface {
@@ -69,9 +70,13 @@ func New(
 }
 
 // Register implements auth.Auth.
-func (a *Auth) Register(ctx context.Context, username, password string) (bool, error) {
-	const op = "auth.Register"
-	log := a.log.With(slog.String("op", op))
+func (a *Auth) Register(ctx context.Context, email, username, password string) (bool, error) {
+	const op = "services.auth.Register"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("email", email),
+		slog.String("username", username),
+	)
 	log.Info("register user")
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -80,7 +85,12 @@ func (a *Auth) Register(ctx context.Context, username, password string) (bool, e
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err := a.usrSaver.SaveUser(ctx, username, hashedPass); err != nil {
+	if err := a.usrSaver.SaveUser(
+		ctx,
+		strings.ToLower(email), 
+		username, 
+		hashedPass,
+	); err != nil {
 		if errors.Is(err, storage.ErrUserExist) {
 			log.Info("user already exists", slerr.Err(err))
 			return false, fmt.Errorf("%s: %w", op, ErrUserExist)
@@ -93,12 +103,16 @@ func (a *Auth) Register(ctx context.Context, username, password string) (bool, e
 }
 
 // Login implements auth.Auth.
-func (a *Auth) Login(ctx context.Context, username string, password string, appID int) (string, error) {
-	const op = "auth.Login"
-	log := a.log.With(slog.String("op", op))
+func (a *Auth) Login(ctx context.Context, email, password string, appID int) (string, error) {
+	const op = "services.auth.Login"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("email", email),
+		slog.Int("appID", appID),
+	)
 	log.Info("login user")
 
-	user, err := a.usrGetter.GetUserByUsername(ctx, username)
+	user, err := a.usrGetter.GetUserByEmail(ctx, strings.ToLower(email))
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			log.Error("failed to get user", slerr.Err(err))
@@ -134,10 +148,55 @@ func (a *Auth) Login(ctx context.Context, username string, password string, appI
 
 }
 
+// ChangeUsername implements auth.Auth.
+func (a *Auth) ChangeUsername(ctx context.Context, token, username string) (bool, error) {
+	const op = "services.auth.ChangeUsername"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("token", token),
+	)
+	log.Info("change username")
+
+	appId, err := jwt.GetAppIDFromJWTToken(token)
+	if err != nil {
+		log.Error("failed to parce app id from token", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	app, err := a.appProvider.App(ctx, appId)
+	if err != nil {
+		log.Error("failed to get app id", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	userID, err := jwt.GetSubFromJWTToken(token, app)
+	if err != nil {
+		log.Error("failed to get user id", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	user, err := a.usrGetter.GetUserByID(ctx, userID)
+	if err != nil {
+		log.Info("failed to get user from DB", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = a.usrPatcher.PatchUsername(ctx, user, username)
+	if err != nil {
+		log.Info("failed to patch username", slerr.Err(err))
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return true, nil
+}
+
 // ChangePassword implements auth.Auth.
 func (a *Auth) ChangePassword(ctx context.Context, token, newPassword string) (bool, error) {
-	const op = "auth.ChangePassword"
-	log := a.log.With(slog.String("op", op))
+	const op = "services.auth.ChangePassword"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("token", token),
+	)
 	log.Info("change password")
 
 	appId, err := jwt.GetAppIDFromJWTToken(token)
@@ -179,49 +238,60 @@ func (a *Auth) ChangePassword(ctx context.Context, token, newPassword string) (b
 	return true, nil
 }
 
-// ChangeUsername implements auth.Auth.
-func (a *Auth) ChangeUsername(ctx context.Context, token, username string) (bool, error) {
-	const op = "auth.ChangeUsername"
-	log := a.log.With(slog.String("op", op))
-	log.Info("change username")
+// ResetPassword implements auth.Auth.
+func (a *Auth) ResetPassword(ctx context.Context, email string) (bool, error) {
+	const op = "services.auth.ResetPassword"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("email", email),
+	)
+	log.Info("reset password")
 
-	appId, err := jwt.GetAppIDFromJWTToken(token)
+	user, err := a.usrGetter.GetUserByEmail(ctx, strings.ToLower(email))
 	if err != nil {
-		log.Error("failed to parce app id from token", slerr.Err(err))
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Error("failed to get user", slerr.Err(err))
+			return false, fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		}
+
+		log.Error("failed to get user", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	app, err := a.appProvider.App(ctx, appId)
+	password := generatePassword(email)
+
+	// TODO: REMOVE AFTER ADD MAIL SERVICE
+	fmt.Println(password)
+
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Error("failed to get app id", slerr.Err(err))
+		log.Info("failed to generate password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	userID, err := jwt.GetSubFromJWTToken(token, app)
+	err = a.usrPatcher.PatchPassword(ctx, user, hashedPass)
 	if err != nil {
-		log.Error("failed to get user id", slerr.Err(err))
+		log.Info("failed to patch password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	user, err := a.usrGetter.GetUserByID(ctx, userID)
-	if err != nil {
-		log.Info("failed to get user from DB", slerr.Err(err))
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
-
-	err = a.usrPatcher.PatchUsername(ctx, user, username)
-	if err != nil {
-		log.Info("failed to patch username", slerr.Err(err))
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
+	// TODO
+	// err = sendPassToEmailByKafka(password)
+	// if err != nil {
+	// 	log.Info("failed to send password", slerr.Err(err))
+	// 	return false, fmt.Errorf("%s: %w", op, err)
+	// }
 
 	return true, nil
 }
 
 // Me implements auth.Auth.
 func (a *Auth) Me(ctx context.Context, token string) (models.User, error) {
-	const op = "auth.Me"
-	log := a.log.With(slog.String("op", op))
+	const op = "services.auth.Me"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("token", token),
+	)
 	log.Info("get me")
 
 	var user models.User
