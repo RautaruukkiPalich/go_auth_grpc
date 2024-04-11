@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rautaruukkipalich/go_auth_grpc/internal/app/kafka"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/domain/models"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/lib/jwt"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/lib/slerr"
@@ -22,6 +23,7 @@ type Auth struct {
 	usrPatcher  UserPatcher
 	appProvider AppProvider
 	tokenTTL    time.Duration
+	broker      kafka.Brokerer
 }
 
 type UserSaver interface {
@@ -58,6 +60,7 @@ func New(
 	appProvider AppProvider,
 	log *slog.Logger,
 	tokenTTL time.Duration,
+	broker kafka.Brokerer,
 ) *Auth {
 	return &Auth{
 		usrSaver:    userSaver,
@@ -66,6 +69,7 @@ func New(
 		appProvider: appProvider,
 		log:         log,
 		tokenTTL:    tokenTTL,
+		broker:      broker,
 	}
 }
 
@@ -87,8 +91,8 @@ func (a *Auth) Register(ctx context.Context, email, username, password string) (
 
 	if err := a.usrSaver.SaveUser(
 		ctx,
-		strings.ToLower(email), 
-		username, 
+		strings.ToLower(email),
+		username,
 		hashedPass,
 	); err != nil {
 		if errors.Is(err, storage.ErrUserExist) {
@@ -260,9 +264,6 @@ func (a *Auth) ResetPassword(ctx context.Context, email string) (bool, error) {
 
 	password := generatePassword(email)
 
-	// TODO: REMOVE AFTER ADD MAIL SERVICE
-	fmt.Println(password)
-
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Info("failed to generate password", slerr.Err(err))
@@ -275,12 +276,12 @@ func (a *Auth) ResetPassword(ctx context.Context, email string) (bool, error) {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	// TODO
-	// err = sendPassToEmailByKafka(password)
-	// if err != nil {
-	// 	log.Info("failed to send password", slerr.Err(err))
-	// 	return false, fmt.Errorf("%s: %w", op, err)
-	// }
+	a.broker.AddToQueue(
+		kafka.KafkaMessage{
+			Topic: "mail",
+			Payload: password,
+		},
+	)
 
 	return true, nil
 }

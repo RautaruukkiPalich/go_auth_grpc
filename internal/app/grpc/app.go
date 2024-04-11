@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 
+	"github.com/rautaruukkipalich/go_auth_grpc/internal/app/kafka"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/config"
 	authgrpc "github.com/rautaruukkipalich/go_auth_grpc/internal/grpc/auth"
 	authsrvcs "github.com/rautaruukkipalich/go_auth_grpc/internal/services/auth"
@@ -15,12 +16,14 @@ import (
 type App struct {
 	log        *slog.Logger
 	gRPCServer *grpc.Server
+	broker     kafka.Brokerer
 	port       string
 }
 
 func New(
 	log *slog.Logger,
 	cfg *config.Config,
+	broker kafka.Brokerer,
 ) *App {
 	gRPCServer := grpc.NewServer(
 		grpc.ConnectionTimeout(
@@ -57,6 +60,7 @@ func New(
 		storage,
 		log,
 		cfg.Token.TTL,
+		broker,
 	)
 
 	authgrpc.RegisterServer(gRPCServer, auth)
@@ -97,6 +101,8 @@ func (a *App) Stop() {
 	log := a.log.With(slog.String("op", op))
 
 	log.Info("stop grpc server", slog.String("port", a.port))
+
+	a.broker.Close()
 
 	a.gRPCServer.GracefulStop()
 }

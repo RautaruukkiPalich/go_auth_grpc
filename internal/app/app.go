@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	grpcapp "github.com/rautaruukkipalich/go_auth_grpc/internal/app/grpc"
+	"github.com/rautaruukkipalich/go_auth_grpc/internal/app/kafka"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/config"
 )
 
@@ -18,7 +19,9 @@ func New(
 	// init storage 
 	// init service auth
 
-	grpcApp := grpcapp.New(log, cfg)
+	broker := kafka.New(log)
+	grpcApp := grpcapp.New(log, cfg, broker)
+	
 
 	return &App{
 		GRPCSrv: grpcApp,

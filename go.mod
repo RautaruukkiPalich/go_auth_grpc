@@ -5,6 +5,7 @@ go 1.21.0
 require golang.org/x/crypto v0.22.0
 
 require (
+	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
