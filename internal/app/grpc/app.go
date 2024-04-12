@@ -69,6 +69,7 @@ func New(
 		log:        log,
 		gRPCServer: gRPCServer,
 		port:       cfg.Server.Port,
+		broker:     broker,
 	}
 }
 
@@ -102,7 +103,6 @@ func (a *App) Stop() {
 
 	log.Info("stop grpc server", slog.String("port", a.port))
 
-	a.broker.Close()
-
+	a.broker.Stop()
 	a.gRPCServer.GracefulStop()
 }

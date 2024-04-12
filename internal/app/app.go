@@ -27,3 +27,7 @@ func New(
 		GRPCSrv: grpcApp,
 	}
 }
+
+func (a *App)Stop() {
+	a.GRPCSrv.Stop()
+}

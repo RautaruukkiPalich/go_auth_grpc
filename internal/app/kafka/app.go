@@ -27,7 +27,7 @@ type Broker struct {
 
 type Brokerer interface {
 	AddToQueue(msg KafkaMessage)
-	Close()
+	Stop()
 }
 
 func New(log *slog.Logger) *Broker {
@@ -72,11 +72,11 @@ func (b *Broker) AddToQueue(msg KafkaMessage) {
 	}
 }
 
-func (b *Broker) Close() {
+func (b *Broker) Stop() {
 	const op = "app.kafka.app.Close"
 	log := b.log.With(slog.String("op", op))
 
 	log.Info("close broker")
 
-	b.broker.Close()
+	defer b.broker.Close()
 }
