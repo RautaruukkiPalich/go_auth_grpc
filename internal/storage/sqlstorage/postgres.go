@@ -32,6 +32,9 @@ func New(path string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
+func (s *Storage) Close() {
+	s.db.Close()
+}
 
 func (s *Storage) SaveUser(ctx context.Context, email, username string, hashedPass []byte) error {
 	const op = "storage.postgres.SaveUser"

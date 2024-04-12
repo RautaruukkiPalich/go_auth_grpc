@@ -13,11 +13,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+type DBCloser interface {
+	Close()
+}
+
 type App struct {
 	log        *slog.Logger
 	gRPCServer *grpc.Server
 	broker     kafka.Brokerer
 	port       string
+	db         DBCloser
 }
 
 func New(
@@ -70,6 +75,7 @@ func New(
 		gRPCServer: gRPCServer,
 		port:       cfg.Server.Port,
 		broker:     broker,
+		db:         storage,
 	}
 }
 
@@ -104,5 +110,6 @@ func (a *App) Stop() {
 	log.Info("stop grpc server", slog.String("port", a.port))
 
 	a.broker.Stop()
+	a.db.Close()
 	a.gRPCServer.GracefulStop()
 }
