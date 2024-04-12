@@ -16,6 +16,7 @@ type KafkaMessage struct {
 
 type Payload struct {
 	Email   string `json:"email"`
+	Header string	`json:"header"`
 	Message string `json:"message"`
 }
 

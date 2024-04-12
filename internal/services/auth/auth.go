@@ -51,6 +51,7 @@ var (
 
 const (
 	ZeroValue = 0
+	ResetPassword = "reset password"
 )
 
 func New(
@@ -281,6 +282,7 @@ func (a *Auth) ResetPassword(ctx context.Context, email string) (bool, error) {
 			Topic: "mail",
 			Payload: kafka.Payload{
 				Email: user.Email,
+				Header: ResetPassword,
 				Message: password,
 			},
 		},
