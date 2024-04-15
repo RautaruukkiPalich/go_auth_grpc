@@ -86,7 +86,7 @@ func (a *Auth) Register(ctx context.Context, email, username, password string) (
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Info("error generating password", slerr.Err(err))
+		log.Error("error generating password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -129,23 +129,23 @@ func (a *Auth) Login(ctx context.Context, email, password string, appID int) (st
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.HashedPass, []byte(password)); err != nil {
-		log.Info("failed to check password", slerr.Err(err))
+		log.Error("failed to check password", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	app, err := a.appProvider.App(ctx, appID)
 	if err != nil {
-		log.Info("failed to get app", slerr.Err(err))
+		log.Error("failed to get app", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 	if app.Secret == "" {
-		log.Info("empty secret", slerr.Err(ErrInvalidCredentials))
+		log.Error("empty secret", slerr.Err(ErrInvalidCredentials))
 		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 
 	token, err := jwt.NewJWTToken(user, app, a.tokenTTL)
 	if err != nil {
-		log.Info("failed to create token", slerr.Err(err))
+		log.Error("failed to create token", slerr.Err(err))
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -182,13 +182,13 @@ func (a *Auth) ChangeUsername(ctx context.Context, token, username string) (bool
 
 	user, err := a.usrGetter.GetUserByID(ctx, userID)
 	if err != nil {
-		log.Info("failed to get user from DB", slerr.Err(err))
+		log.Error("failed to get user from DB", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
 	err = a.usrPatcher.PatchUsername(ctx, user, username)
 	if err != nil {
-		log.Info("failed to patch username", slerr.Err(err))
+		log.Error("failed to patch username", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -224,19 +224,19 @@ func (a *Auth) ChangePassword(ctx context.Context, token, newPassword string) (b
 
 	user, err := a.usrGetter.GetUserByID(ctx, userID)
 	if err != nil {
-		log.Info("failed to get user from DB", slerr.Err(err))
+		log.Error("failed to get user from DB", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		log.Info("failed to generate password", slerr.Err(err))
+		log.Error("failed to generate password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
 	err = a.usrPatcher.PatchPassword(ctx, user, hashedPass)
 	if err != nil {
-		log.Info("failed to patch password", slerr.Err(err))
+		log.Error("failed to patch password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -267,13 +267,13 @@ func (a *Auth) ResetPassword(ctx context.Context, email string) (bool, error) {
 
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Info("failed to generate password", slerr.Err(err))
+		log.Error("failed to generate password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
 	err = a.usrPatcher.PatchPassword(ctx, user, hashedPass)
 	if err != nil {
-		log.Info("failed to patch password", slerr.Err(err))
+		log.Error("failed to patch password", slerr.Err(err))
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -322,7 +322,7 @@ func (a *Auth) Me(ctx context.Context, token string) (models.User, error) {
 
 	user, err = a.usrGetter.GetUserByID(ctx, userID)
 	if err != nil {
-		log.Info("failed to get user from DB", slerr.Err(err))
+		log.Error("failed to get user from DB", slerr.Err(err))
 		return user, fmt.Errorf("%s: %w", op, err)
 	}
 
