@@ -8,6 +8,7 @@ import (
 
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/app"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/config"
+	"github.com/rautaruukkipalich/prettyslog"
 )
 
 const (
@@ -47,9 +48,7 @@ func MustRunLogger(env string) *slog.Logger {
 	var log *slog.Logger
 	switch env {
 	case envLocal:
-		log = slog.New(
-			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-		)
+		log = prettyslog.NewPrettyLogger("\t")
 	case envDev:
 		log = slog.New(
 			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),

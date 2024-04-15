@@ -2,14 +2,23 @@ module github.com/rautaruukkipalich/go_auth_grpc
 
 go 1.21.0
 
-require golang.org/x/crypto v0.22.0
+require (
+	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
+	github.com/rautaruukkipalich/prettyslog v0.0.2
+	golang.org/x/crypto v0.22.0
+)
 
 require (
-	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0 // indirect
+	github.com/fatih/color v1.16.0 // indirect
+	github.com/fatih/structs v1.1.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/moby/patternmatcher v0.6.0 // indirect
+	github.com/moby/sys/sequential v0.5.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
