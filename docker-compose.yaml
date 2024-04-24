@@ -59,6 +59,20 @@ services:
     networks:
       - kafka-network
 
+  kafka-ui:
+    container_name: go_auth_users_grpc_kafka-ui_container
+    image: provectuslabs/kafka-ui
+    ports:
+      - "9090:8080"
+    restart: always
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - kafka-network
+
 volumes:
     postgres:
     pgadmin:
