@@ -11,8 +11,6 @@ services:
     restart: always
     volumes:
       - postgres:/data/postgres
-    networks:
-      - postgres
 
   pgadmin:
     container_name: go_auth_users_grpc_pgadmin_container
@@ -29,8 +27,6 @@ services:
     restart: always
     volumes:
       - pgadmin:/var/lib/pgadmin
-    networks:
-      - postgres
   
   zookeeper:
     container_name: go_auth_users_grpc_zookeeper_container
@@ -40,8 +36,6 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "${KAFKA_PORT:-22181}:2181"
-    networks:
-      - kafka-network
 
   kafka:
     container_name: go_auth_users_grpc_kafka_container
@@ -56,8 +50,6 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
     ports:
       - "${KAFKA_PORT:-29092}:29092"
-    networks:
-      - kafka-network
 
   kafka-ui:
     container_name: go_auth_users_grpc_kafka-ui_container
@@ -71,15 +63,18 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-    networks:
-      - kafka-network
+
+  clickhouse:
+    container_name: clickhouse
+    image: clickhouse/clickhouse-server:24.3.2.23-alpine
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    restart: always
+    volumes:
+      - clickhouse:/data/clickhouse
 
 volumes:
     postgres:
     pgadmin:
-
-networks:
-  postgres:
-    driver: bridge
-  kafka-network:
-    driver: bridge
+    clickhouse:
