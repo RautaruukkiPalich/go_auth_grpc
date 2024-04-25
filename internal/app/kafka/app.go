@@ -3,9 +3,8 @@ package kafka
 import (
 	"encoding/json"
 	"log/slog"
-
-	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
-
+	"context"
+	"github.com/segmentio/kafka-go"
 	"github.com/rautaruukkipalich/go_auth_grpc/internal/lib/slerr"
 )
 
@@ -21,7 +20,7 @@ type Payload struct {
 }
 
 type Broker struct {
-	broker *kafka.Producer
+	broker *kafka.Writer
 	log    *slog.Logger
 }
 
@@ -32,21 +31,15 @@ type Brokerer interface {
 
 func New(log *slog.Logger) *Broker {
 
-	p, err := kafka.NewProducer(
-		&kafka.ConfigMap{
-			"bootstrap.servers": "localhost:29092",
-			"client.id":         "kafka-producer",
-			"acks":              "all",
-		},
-	)
-	if err != nil {
-		panic(err)
+	w := &kafka.Writer{
+		Addr:     kafka.TCP("localhost:29092"),
+		Balancer: &kafka.LeastBytes{},
 	}
 
 	log.Info("start broker")
 
 	return &Broker{
-		broker: p,
+		broker: w,
 		log:    log,
 	}
 }
@@ -60,13 +53,12 @@ func (b *Broker) AddToQueue(msg KafkaMessage) {
 		log.Error("error json data", slerr.Err(err))
 	}
 
-	err = b.broker.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{
-			Topic:     &msg.Topic,
-			Partition: kafka.PartitionAny,
-		},
-		Value: []byte(data),
-	}, nil)
+	err = b.broker.WriteMessages(
+		context.Background(),
+		kafka.Message{
+			Topic: msg.Topic,
+			Value: []byte(data),
+		})
 	if err != nil {
 		log.Error("error while sending message", slerr.Err(err))
 	}
